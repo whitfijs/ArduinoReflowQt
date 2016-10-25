@@ -9,6 +9,10 @@ ReflowController::ReflowController(QWidget *parent) :
 
     ui->temperatureGauge->setMin(0.0);
     ui->temperatureGauge->setMax(250.0);
+
+    connect(ui->startButton, SIGNAL(pressed()), this, SLOT(startStopButtonClicked()));
+    this->openSerialPort();
+    isStarted = false;
 }
 
 ReflowController::~ReflowController()
@@ -17,13 +21,14 @@ ReflowController::~ReflowController()
 }
 
 void ReflowController::openSerialPort(){
+    const auto serialPortInfos = QSerialPortInfo::availablePorts();
+
     serial.close();
-    serial.setPortName("COM11");
+    serial.setPortName("/dev/ttyUSB0");
     serial.setBaudRate(115200);
     if(serial.open(QIODevice::ReadWrite)){
         reader = new SerialPortReader(&serial);
         updateTimer = new QTimer();
-        serial.write("1");
         connect(updateTimer, SIGNAL(timeout()), this, SLOT(updateParameters()));
         updateTimer->start(100);
     }
@@ -44,6 +49,7 @@ QString ReflowController::getStatus(int status){
     }else if(status & 0x01){
         return returnString.append("RAMP UP");
     }
+    return "--";
 }
 
 
@@ -52,19 +58,30 @@ QString ReflowController::getStatus(int status){
  *
  */
 void ReflowController::startStopButtonClicked(){
-    if(!serial.isOpen()){
-        this->openSerialPort();
+    if(!isStarted){
+        serial.write("1");
+        serial.waitForBytesWritten(100);
+        this->ui->startButton->setText("Stop");
+        isStarted = true;
     }else{
-        serial.flush();
-        serial.close();
+        serial.write("0");
+        serial.waitForBytesWritten(100);
+        this->ui->startButton->setText("Start");
+        isStarted = false;
     }
 }
 
 void ReflowController::updateParameters(){
     if(reader->dataReady){
         QStringList consoleOutput = reader->getData();
-        QString output = consoleOutput.at(0);
+        QString output = (QString)consoleOutput.at(0);
+        if(output.isEmpty()){
+            return;
+        }
         QStringList parameters = output.split("\t");
+        if(parameters.length() < 4){
+            return;
+        }
 
         float temperature = ((QString)parameters.at(0)).toFloat();
         this->ui->temperatureGauge->updateGauge(temperature);
@@ -72,5 +89,18 @@ void ReflowController::updateParameters(){
 
         int status = ((QString)parameters.at(1)).toInt();
         this->ui->statusLabel->setText(getStatus(status));
+
+        int powerOutputRaw = ((QString)parameters.at(2)).toInt();
+        float powerOutput = (15200.0 - (float)powerOutputRaw)/15200.0;
+        powerOutput*=100.0;
+        this->ui->powerOutputProgressBar->setValue(powerOutput);
+        this->ui->powerOutputLabel->setText(QString("Power Output: %1%").arg(powerOutput));
+
     }
+}
+
+void ReflowController::closeEvent(QCloseEvent *event){
+    serial.flush();
+    serial.close();
+    event->accept();
 }

@@ -2,7 +2,9 @@
 #define REFLOWCONTROLLER_H
 
 #include <QMainWindow>
+#include <QCloseEvent>
 #include <QtSerialPort/QSerialPort>
+#include <QtSerialPort/QSerialPortInfo>
 #include <QTextStream>
 #include <QCoreApplication>
 #include <QFile>
@@ -27,6 +29,7 @@ private:
     SerialPortReader *reader;
     Ui::ReflowController *ui;
     QTimer * updateTimer;
+    bool isStarted;
 
     void openSerialPort();
     QString getStatus(int status);
@@ -34,6 +37,7 @@ private:
 private slots:
     void startStopButtonClicked();
     void updateParameters();
+    void closeEvent(QCloseEvent * event);
 };
 
 #endif // REFLOWCONTROLLER_H

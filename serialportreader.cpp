@@ -69,19 +69,21 @@ SerialPortReader::~SerialPortReader()
 {
 }
 
-void SerialPortReader::handleReadyRead()
-{
-    m_readData.append(m_serialPort->readAll());
+void SerialPortReader::handleReadyRead(){
+    m_readData.append(m_serialPort->readLine());
     dataReady = true;
 }
 
 QStringList SerialPortReader::getData(){
+    QStringList errorReturn;
+    errorReturn.append("");
     if(!m_readData.isEmpty()){
         QString data = QString(m_readData);
         m_readData.clear();
         dataReady = false;
         return data.split("\n");
     }
+    return errorReturn;
 }
 
 void SerialPortReader::handleTimeout()
