@@ -13,6 +13,11 @@ ReflowController::ReflowController(QWidget *parent) :
     connect(ui->startButton, SIGNAL(pressed()), this, SLOT(startStopButtonClicked()));
     this->openSerialPort();
     isStarted = false;
+    this->ui->leadedButton->setChecked(true);
+    connect(ui->leadedButton, SIGNAL(clicked(bool)), this, SLOT(onLeadedSolderChecked(bool)));
+    connect(ui->unleadedButton, SIGNAL(clicked(bool)), this, SLOT(onUnleadedSolderChecked(bool)));
+    connect(ui->pivaHeatButton, SIGNAL(clicked(bool)), this, SLOT(onPivaHeatChecked(bool)));
+
 }
 
 ReflowController::~ReflowController()
@@ -24,7 +29,7 @@ void ReflowController::openSerialPort(){
     const auto serialPortInfos = QSerialPortInfo::availablePorts();
 
     serial.close();
-    serial.setPortName("/dev/ttyUSB0");
+    serial.setPortName("COM11");
     serial.setBaudRate(115200);
     if(serial.open(QIODevice::ReadWrite)){
         reader = new SerialPortReader(&serial);
@@ -32,6 +37,29 @@ void ReflowController::openSerialPort(){
         connect(updateTimer, SIGNAL(timeout()), this, SLOT(updateParameters()));
         updateTimer->start(100);
     }
+}
+
+bool ReflowController::openLogFile()
+{
+    qDebug() << "Open Log File";
+    if(logOutput != nullptr)
+    {
+        logOutput->close();
+    }
+
+    QString path = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    QString localPath = QString("/reflow_logs/log_output_%1").arg(QDateTime::currentMSecsSinceEpoch()).append(".log");
+    path.append(localPath);
+
+    qDebug() << "Opening file at: " << path;
+    logOutput = new QFile(path);
+    if(logOutput->open(QIODevice::ReadWrite))
+    {
+        qDebug() << "Log file opened: " << path;
+        return true;
+    }
+
+    return false;
 }
 
 
@@ -63,11 +91,13 @@ void ReflowController::startStopButtonClicked(){
         serial.waitForBytesWritten(100);
         this->ui->startButton->setText("Stop");
         isStarted = true;
+        openLogFile();
     }else{
-        serial.write("0");
+        serial.write("2");
         serial.waitForBytesWritten(100);
         this->ui->startButton->setText("Start");
         isStarted = false;
+        logOutput->close();
     }
 }
 
@@ -77,6 +107,10 @@ void ReflowController::updateParameters(){
         QString output = (QString)consoleOutput.at(0);
         if(output.isEmpty()){
             return;
+        }
+        if(logOutput != nullptr)
+        {
+            logOutput->write(output.toStdString().c_str(), output.length());
         }
         QStringList parameters = output.split("\t");
         if(parameters.length() < 4){
@@ -103,4 +137,34 @@ void ReflowController::closeEvent(QCloseEvent *event){
     serial.flush();
     serial.close();
     event->accept();
+}
+
+void ReflowController::onLeadedSolderChecked(bool checked){
+    if(serial.isOpen()){
+        if(checked){
+            serial.write("3");
+            this->ui->unleadedButton->setChecked(false);
+            this->ui->pivaHeatButton->setChecked(false);
+        }
+    }
+}
+
+void ReflowController::onUnleadedSolderChecked(bool checked){
+    if(serial.isOpen()){
+        if(checked){
+            serial.write("4");
+            this->ui->leadedButton->setChecked(false);
+            this->ui->pivaHeatButton->setChecked(false);
+        }
+    }
+}
+
+void ReflowController::onPivaHeatChecked(bool checked){
+    if(serial.isOpen()){
+        if(checked){
+            serial.write("5");
+            this->ui->unleadedButton->setChecked(false);
+            this->ui->leadedButton->setChecked(false);
+        }
+    }
 }
